@@ -94,9 +94,11 @@ async function readLargeJSON(filePath) {
   });
 }
 
+const fileName = process.argv[2];
+
 async function main() {
   try {
-    const count = await readLargeJSON('./../data/output.json');
+    const count = await readLargeJSON(`./../data/${fileName}.json`);
     console.log(`Total objects processed: ${count}`);
   } catch (error) {
     console.error('Error reading file:', error);

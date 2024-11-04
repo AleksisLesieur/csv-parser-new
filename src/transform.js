@@ -138,9 +138,9 @@ class parseCSV extends Transform {
           }
 
           const objectString =
-            values.reduce((acc, key, index) => {
+            this.headers.reduce((acc, header, index) => {
               const value = this.formatField(values[index]);
-              return index === 0 ? `{"${key}": "${value}"` : `${acc},"${key}": "${value}"`;
+              return index === 0 ? `{"${header}": "${value}"` : `${acc},"${header}": "${value}"`;
             }, '') + '}';
 
           this.push(objectString);
