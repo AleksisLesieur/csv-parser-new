@@ -27,21 +27,6 @@ class parseCSV extends Transform {
     return cleaned;
   }
 
-  // createObjectString(values) {
-  //   let objectString = '{';
-
-  //   for (let i = 0; i < this.headers.length; i++) {
-  //     if (i > 0) {
-  //       objectString += ',';
-  //     }
-  //     const value = this.formatField(values[i]);
-  //     objectString += `"${this.headers[i]}": "${value}"`;
-  //   }
-
-  //   objectString += '}';
-  //   return objectString;
-  // }
-
   createHeaders(values) {
     if (!values || typeof values !== 'string') {
       return [];
@@ -66,6 +51,23 @@ class parseCSV extends Transform {
     return `{${objectContent}}`;
   }
 
+  processChunk(chunk) {
+    const objects = [];
+    const lines = chunk.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const values = line.split(this.selectedSeparator);
+      if (values.length !== this.headers.length) continue;
+
+      objects.push(this.objectString(this.headers, values));
+    }
+
+    return objects.join(',');
+  }
+
   _transform(chunk, encoding, done) {
     try {
       this.buffer += chunk.toString();
@@ -77,29 +79,31 @@ class parseCSV extends Transform {
         return;
       }
 
-      const lines = this.buffer.slice(0, lastNewLineIndex).split('\n');
+      const currentChunk = this.buffer.slice(0, lastNewLineIndex);
 
       this.buffer = this.buffer.slice(lastNewLineIndex + 1);
 
       if (this.isFirstChunk) {
         this.isFirstChunk = false;
 
-        const headerValues = lines.shift();
+        const lines = currentChunk.split('\n');
 
-        this.headers = this.createHeaders(headerValues).map((h) => h.trim());
+        const headerLine = lines.shift();
+
+        this.headers = this.createHeaders(headerLine).map((h) => h.trim());
+
+        if (lines.length > 0) {
+          const processedChunk = this.processChunk(lines.join('\n'));
+          this.push('[' + processedChunk + ',');
+        } else {
+          this.push('[');
+        }
+      } else {
+        const processedChunk = this.processChunk(currentChunk);
+        if (processedChunk) {
+          this.push(processedChunk + ',');
+        }
       }
-
-      const jsonArray =
-        '[' +
-        lines
-          .map((line, index) => {
-            const values = line.split(this.selectedSeparator);
-            const isLastItem = index === lines.length - 1;
-            return this.objectString(this.headers, values) + ',';
-          })
-          .join('');
-
-      this.push(jsonArray);
 
       done();
     } catch (err) {
@@ -112,21 +116,12 @@ class parseCSV extends Transform {
   _flush(callback) {
     try {
       if (this.buffer.trim()) {
-        const lines = this.buffer.split('\n').filter((line) => line.trim());
-
-        if (lines.length > 0) {
-          const jsonEnd =
-            lines
-              .map((line, index) => {
-                const values = line.split(this.selectedSeparator);
-                const isLastItem = index === lines.length - 1;
-                return this.objectString(this.headers, values);
-              })
-              .join('') + ']';
-
-          this.push(jsonEnd);
+        const processChunk = this.processChunk(this.buffer);
+        if (processChunk) {
+          this.push(processChunk);
         }
       }
+      this.push(']');
       callback();
     } catch (error) {
       callback(error);

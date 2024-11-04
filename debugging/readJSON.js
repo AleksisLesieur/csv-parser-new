@@ -1,109 +1,92 @@
 const fs = require('fs');
 
-async function readLargeJSON(filePath) {
-  console.log(`Reading file: ${filePath}`);
+function isValidJSON(filePath) {
+  try {
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    JSON.parse(fileContent);
+    return 'it is valid';
+  } catch (error) {
+    return 'no, there is an error: ' + error.message;
+  }
+}
 
-  const stream = fs.createReadStream(filePath, {
-    encoding: 'utf8',
-    highWaterMark: 100 * 1024 * 1024, // 10MB chunks
-  });
-
-  let buffer = '';
-  let isFirstChunk = true;
-  let count = 0;
-  let depth = 0;
-  let objectStart = -1;
-
+// Streaming version for larger files
+async function isValidJSONStream(filePath) {
   return new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(filePath, {
+      encoding: 'utf8',
+      highWaterMark: 1024 * 1024, // 1MB chunks
+    });
+
+    let buffer = '';
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+
     stream.on('data', (chunk) => {
       try {
-        // Handle the first chunk's opening bracket
-        if (isFirstChunk) {
-          chunk = chunk.trimStart();
-          if (chunk[0] === '[') {
-            chunk = chunk.slice(1);
+        for (let i = 0; i < chunk.length; i++) {
+          const char = chunk[i];
+
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
           }
-          isFirstChunk = false;
-        }
 
-        buffer += chunk;
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+          } else if (char === '\\' && !escapeNext) {
+            escapeNext = true;
+          }
 
-        let pos = 0;
-        while (pos < buffer.length) {
-          // Track object boundaries using { and }
-          if (buffer[pos] === '{') {
-            if (depth === 0) {
-              objectStart = pos;
+          if (!inString) {
+            if (char === '{' || char === '[') {
+              depth++;
+            } else if (char === '}' || char === ']') {
+              depth--;
             }
-            depth++;
-          } else if (buffer[pos] === '}') {
-            depth--;
 
-            // We've found a complete object
-            if (depth === 0 && objectStart !== -1) {
-              let objStr = buffer.slice(objectStart, pos + 1);
-              try {
-                const obj = JSON.parse(objStr);
-                count++;
-
-                // Process the object
-                if (count % 1000 === 0) {
-                  console.log(`Processed ${count} objects`);
-                  // Log a sample object every 1000 objects
-                  console.log('Sample object:', JSON.stringify(obj).slice(0, 100) + '...');
-                }
-
-                // Move past the comma if it exists
-                while (pos + 1 < buffer.length && (buffer[pos + 1] === ',' || buffer[pos + 1] === ' ' || buffer[pos + 1] === '\n')) {
-                  pos++;
-                }
-
-                // Remove processed object from buffer
-                buffer = buffer.slice(pos + 1);
-                pos = 0;
-                objectStart = -1;
-                continue;
-              } catch (e) {
-                console.error('Error parsing object:', e.message);
-              }
+            if (depth < 0) {
+              resolve('no, there is an error: Unexpected closing bracket');
+              stream.destroy();
+              return;
             }
           }
-          pos++;
         }
+      } catch (error) {
+        resolve('no, there is an error: ' + error.message);
+        stream.destroy();
+      }
+    });
 
-        // If buffer gets too large, trim it
-        if (buffer.length > 20 * 1024 * 1024) {
-          // 20MB
-          console.warn('Buffer getting too large, possible malformed JSON');
-          buffer = buffer.slice(-10 * 1024 * 1024); // Keep last 10MB
-        }
-      } catch (e) {
-        console.error('Error processing chunk:', e.message);
+    stream.on('end', () => {
+      if (depth !== 0) {
+        resolve('no, there is an error: Unclosed brackets');
+      } else {
+        resolve('it is valid');
       }
     });
 
     stream.on('error', (error) => {
-      console.error('Stream error:', error);
-      reject(error);
-    });
-
-    stream.on('end', () => {
-      console.log(`Finished processing ${count} objects`);
-      resolve(count);
+      resolve('no, there is an error: ' + error.message);
     });
   });
 }
 
-const fileName = process.argv[2];
-
-async function main() {
+// Usage:
+async function validateJSON(filePath) {
   try {
-    const count = await readLargeJSON(`./../data/${fileName}.json`);
-    console.log(`Total objects processed: ${count}`);
+    // For small files
+    // console.log(isValidJSON(filePath));
+
+    // For large files
+    const result = await isValidJSONStream(filePath);
+    console.log(result);
   } catch (error) {
-    console.error('Error reading file:', error);
-    process.exit(1);
+    console.log('no, there is an error: ' + error.message);
   }
 }
 
-main();
+// Call it with your file
+const fileName = process.argv[2];
+validateJSON(`./../data/${fileName}.json`);
