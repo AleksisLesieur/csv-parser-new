@@ -27,22 +27,22 @@ class parseCSV extends Transform {
     return cleaned;
   }
 
-  createObjectString(values) {
-    let objectString = '{';
+  // createObjectString(values) {
+  //   let objectString = '{';
 
-    for (let i = 0; i < this.headers.length; i++) {
-      if (i > 0) {
-        objectString += ',';
-      }
-      const value = this.formatField(values[i]);
-      objectString += `"${this.headers[i]}": "${value}"`;
-    }
+  //   for (let i = 0; i < this.headers.length; i++) {
+  //     if (i > 0) {
+  //       objectString += ',';
+  //     }
+  //     const value = this.formatField(values[i]);
+  //     objectString += `"${this.headers[i]}": "${value}"`;
+  //   }
 
-    objectString += '}';
-    return objectString;
-  }
+  //   objectString += '}';
+  //   return objectString;
+  // }
 
-  createLines(values) {
+  createHeaders(values) {
     if (!values || typeof values !== 'string') {
       return [];
     }
@@ -75,34 +75,57 @@ class parseCSV extends Transform {
 
         const headerValues = lines.shift();
 
-        this.headers = this.createLines(headerValues).map((h) => h.trim());
+        this.headers = this.createHeaders(headerValues).map((h) => h.trim());
 
         this.push('[\n');
       }
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
+      // for (const line of lines) {
+      //   if (!line.trim()) continue;
+
+      //   const values = line.split(this.selectedSeparator);
+
+      //   if (values.length !== this.headers.length) continue;
+
+      //   if (!this.isFirstObject) {
+      //     this.push(',\n');
+      //   } else {
+      //     this.isFirstObject = false;
+      //   }
+
+      //   const objectString = this.createObjectString(values);
+      //   this.push(objectString);
+      // }
+
+      lines.reduce((isFirst, line) => {
+        if (!line.trim()) return isFirst;
 
         const values = line.split(this.selectedSeparator);
+        if (values.length !== this.headers.length) return isFirst;
 
-        if (values.length !== this.headers.length) continue;
-
-        if (!this.isFirstObject) {
+        if (!isFirst) {
           this.push(',\n');
-        } else {
-          this.isFirstObject = false;
         }
 
-        const objectString = this.createObjectString(values);
+        const objectString =
+          this.headers.reduce((acc, header, index) => {
+            const value = this.formatField(values[index]);
+            return index === 0 ? `{"${header}": "${value}"` : `${acc},"${header}": "${value}"`;
+          }, '') + '}';
+
         this.push(objectString);
-      }
+        return false;
+      }, this.isFirstObject);
+
+      this.isFirstObject = false;
+
       callback();
     } catch (err) {
       callback(err);
     }
   }
 
-  // jog paemus visa chunka ji visa apdoroti i json ir tada papushinti i streama, nes dabar darau kiekviena eilute
+  // jog paemus visa chunka (kuriame pvz 50 eiluciu) ji visa apdoroti i json ir tada papushinti i streama, nes dabar darau kiekviena eilute
 
   _flush(callback) {
     try {
@@ -114,7 +137,12 @@ class parseCSV extends Transform {
             this.push(',\n');
           }
 
-          const objectString = this.createObjectString(values);
+          const objectString =
+            values.reduce((acc, key, index) => {
+              const value = this.formatField(values[index]);
+              return index === 0 ? `{"${key}": "${value}"` : `${acc},"${key}": "${value}"`;
+            }, '') + '}';
+
           this.push(objectString);
         }
       }
