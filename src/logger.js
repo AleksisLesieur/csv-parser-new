@@ -16,7 +16,6 @@ class Logger {
     const now = new Date();
     return now.toDateString().replace(/\s+/g, "-");
   }
-  
 
   saveHours() {
     const now = new Date();
@@ -27,30 +26,22 @@ class Logger {
   }
 
   info(message) {
-    this.logData.push(
-      `${this.saveDate()}; ${this.saveHours()}; INFO; ${message}`
-    );
+    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; INFO; ${message}`);
   }
 
   warning(message) {
     this.saveDate();
-    this.logData.push(
-      `${this.saveDate()}; ${this.saveHours()}; WARNING!; ${message}`
-    );
+    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; WARNING!; ${message}`);
   }
 
   error(message) {
     this.saveDate();
-    this.logData.push(
-      `${this.saveDate()}; ${this.saveHours()}; ERROR!; ${message}`
-    );
+    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; ERROR!; ${message}`);
   }
 
   success(message) {
     this.saveDate();
-    this.logData.push(
-      `${this.saveDate()}; ${this.saveHours()}; SUCCESS!; ${message}`
-    );
+    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; SUCCESS!; ${message}`);
   }
 
   getData() {

@@ -1,22 +1,23 @@
-const fs = require('fs');
-const { Transform } = require('stream');
-const { pipeline } = require('stream/promises');
+const fs = require("fs");
+const { Transform } = require("stream");
+const { pipeline } = require("stream/promises");
 
-const { performance } = require('perf_hooks');
+const { performance } = require("perf_hooks");
+const { EOL } = require("os");
 
-class parseCSV extends Transform {
+class ParseCSV extends Transform {
   constructor() {
-    super({ encoding: 'utf-8', highWaterMark: 1024 * 1024 });
-    this.buffer = '';
+    super({ encoding: "utf-8" });
+    this.isHeadersCreated = true;
     this.headers = null;
-    this.isFirstChunk = true;
-    this.isFirstObject = true;
-    this.separators = [',', ';', '|', '\t'];
-    this.selectedSeparator = '';
+    this.isFirstBatch = true;
+    this.separators = [",", ";", "|", "\t"];
+    this.selectedSeparator = "";
+    this.lastLine = null;
   }
 
   formatField(value) {
-    if (!value) return '';
+    if (!value) return "";
 
     let cleaned = value.trim();
 
@@ -27,79 +28,61 @@ class parseCSV extends Transform {
     return cleaned;
   }
 
-  // createObjectString(values) {
-  //   let objectString = '{';
-
-  //   for (let i = 0; i < this.headers.length; i++) {
-  //     if (i > 0) {
-  //       objectString += ',';
-  //     }
-  //     const value = this.formatField(values[i]);
-  //     objectString += `"${this.headers[i]}": "${value}"`;
-  //   }
-
-  //   objectString += '}';
-  //   return objectString;
-  // }
-
   createHeaders(values) {
-    if (!values || typeof values !== 'string') {
+    if (!values || typeof values !== "string") {
       return [];
     }
 
     for (const separator of this.separators) {
       if (values.includes(separator)) {
         this.selectedSeparator = separator;
-        return values.split(separator);
+        this.headers = values.split(separator).map((h) => h.trim());
       }
     }
   }
 
-  // padaryk taip jog nebebutu backpressure
-
-  objectString(headers, values) {
-    const objectContent = headers.reduce((acc, header, index) => {
-      const value = this.formatField(values[index]);
-
-      return index === 0 ? `"${header}": "${value}"` : `${acc}, "${header}": "${value}"`;
-    }, '');
-    return `{${objectContent}}`;
+  createObjectString(headers, values) {
+    let result = "{";
+    for (let i = 0; i < headers.length; i++) {
+      if (i > 0) {
+        result += ",";
+      }
+      result += `"${headers[i]}":"${this.formatField(values[i])}"`;
+    }
+    return result + "}";
   }
 
   _transform(chunk, encoding, done) {
     try {
-      this.buffer += chunk.toString();
+      const str = chunk.toString();
+      const lines = str.split(EOL);
 
-      const lastNewLineIndex = this.buffer.lastIndexOf('\n');
+      // Save last line for flush
+      this.lastLine = lines.pop();
 
-      if (lastNewLineIndex === -1) {
-        done();
-        return;
+      if (this.isHeadersCreated && lines.length > 0) {
+        const headerLine = lines.shift();
+        this.createHeaders(headerLine);
+        this.isHeadersCreated = false;
       }
 
-      const lines = this.buffer.slice(0, lastNewLineIndex).split('\n');
+      const validLines = lines.filter((line) => line.trim());
 
-      this.buffer = this.buffer.slice(lastNewLineIndex + 1);
+      if (validLines.length > 0) {
+        const prefix = this.isFirstBatch ? "[" : ",";
+        this.isFirstBatch = false;
 
-      if (this.isFirstChunk) {
-        this.isFirstChunk = false;
-
-        const headerValues = lines.shift();
-
-        this.headers = this.createHeaders(headerValues).map((h) => h.trim());
-      }
-
-      const jsonArray =
-        '[' +
-        lines
-          .map((line, index) => {
+        const jsonData = validLines
+          .map((line) => {
             const values = line.split(this.selectedSeparator);
-            const isLastItem = index === lines.length - 1;
-            return this.objectString(this.headers, values) + ',';
+            return this.createObjectString(this.headers, values);
           })
-          .join('');
+          .join(",");
 
-      this.push(jsonArray);
+        if (jsonData) {
+          this.push(prefix + jsonData);
+        }
+      }
 
       done();
     } catch (err) {
@@ -107,29 +90,19 @@ class parseCSV extends Transform {
     }
   }
 
-  // jog paemus visa chunka (kuriame pvz 50 eiluciu) ji visa apdoroti i json ir tada papushinti i streama, nes dabar darau kiekviena eilute
-
-  _flush(callback) {
+  _flush(done) {
     try {
-      if (this.buffer.trim()) {
-        const lines = this.buffer.split('\n').filter((line) => line.trim());
-
-        if (lines.length > 0) {
-          const jsonEnd =
-            lines
-              .map((line, index) => {
-                const values = line.split(this.selectedSeparator);
-                const isLastItem = index === lines.length - 1;
-                return this.objectString(this.headers, values);
-              })
-              .join('') + ']';
-
-          this.push(jsonEnd);
-        }
+      if (this.lastLine && this.lastLine.trim()) {
+        const prefix = this.isFirstBatch ? "[" : ",";
+        const values = this.lastLine.split(this.selectedSeparator);
+        const jsonData = this.createObjectString(this.headers, values);
+        this.push(prefix + jsonData);
       }
-      callback();
+
+      this.push("]");
+      done();
     } catch (error) {
-      callback(error);
+      done(error);
     }
   }
 }
@@ -137,16 +110,14 @@ class parseCSV extends Transform {
 async function parseCSVtoJSON(inputFile, outputFile) {
   const startTime = performance.now();
   const readStream = fs.createReadStream(inputFile, {
-    encoding: 'utf-8',
-    highWaterMark: 1024 * 1024,
+    encoding: "utf-8",
   });
 
   const writeStream = fs.createWriteStream(outputFile, {
-    encoding: 'utf-8',
-    highWaterMark: 1024 * 1024,
+    encoding: "utf-8",
   });
 
-  const parse = new parseCSV();
+  const parse = new ParseCSV();
 
   try {
     await pipeline(readStream, parse, writeStream);
@@ -154,7 +125,7 @@ async function parseCSVtoJSON(inputFile, outputFile) {
     const endTime = performance.now();
     const duration = endTime - startTime;
 
-    console.log('Conversion completed successfully');
+    console.log("Conversion completed successfully");
     console.log(`Time taken: ${duration.toFixed(2)} milliseconds`);
     console.log(`Time taken: ${(duration / 1000).toFixed(2)} seconds`);
   } catch (err) {
