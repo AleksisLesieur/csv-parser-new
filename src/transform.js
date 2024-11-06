@@ -10,21 +10,6 @@ const { Logger } = require("./logger");
 
 const logMessage = new Logger();
 
-// class CSVParserError extends Error {
-//   constructor(message, originalError = null) {
-//     super(message);
-//     this.name = "CSVParserError";
-//     this.originalError = originalError;
-//   }
-// }
-
-// class HeaderValidationError extends CSVParserError {
-//   constructor(message) {
-//     super(message);
-//     this.name = "HeaderValidationError";
-//   }
-// }
-
 class ParseCSV extends Transform {
   constructor() {
     super({ highWaterMark: 1024 * 1024 });
@@ -81,16 +66,13 @@ class ParseCSV extends Transform {
 
   _transform(chunk, encoding, done) {
     try {
-      // this.emit("error");
       const str = chunk.toString();
       const data = this.buffer + str;
       const lines = data.split(EOL);
 
       if (this.isFirstBatch) {
-        logMessage.info(`Processing first batch of data`); // Added
+        logMessage.info(`Processing first batch of data`);
       }
-
-      // this.emit("error", "error exists");
 
       this.buffer = lines.pop();
 
@@ -105,15 +87,6 @@ class ParseCSV extends Transform {
       if (validLines.length > 0) {
         const prefix = this.isFirstBatch ? "[" : ",";
         this.isFirstBatch = false;
-
-        // if (validLines.length !== this.headers.length) {
-        //   if (validLines.length > this.headers.length) {
-        //     throw new Error("there are more values than headers!");
-        //   }
-        //   if (validLines.length < this.headers.length) {
-        //     throw new Error("there are more headers than values!");
-        //   }
-        // }
 
         const jsonData = validLines
           .map((line) => {
@@ -169,7 +142,7 @@ async function parseCSVtoJSON(inputFile, outputFile) {
   const readStream = fs.createReadStream(inputFile);
 
   logMessage.info("Conversion start time");
-  logMessage.info(`Reading file: ${inputFile}`); // Added
+  logMessage.info(`Reading file: ${inputFile}`);
   logMessage.info(`Output will be saved to: ${outputFile}`);
 
   const writeStream = fs.createWriteStream(outputFile);
@@ -184,11 +157,11 @@ async function parseCSVtoJSON(inputFile, outputFile) {
 
     logMessage.success("Conversion completed successfully!");
     logMessage.success(`Time taken: ${(duration / 1000).toFixed(2)} seconds`);
-    logMessage.info(`File size processed: ${(fs.statSync(inputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`); // Added
-    logMessage.info(`Output JSON size: ${(fs.statSync(outputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`); // Added
-    logMessage.info("Memory usage: " + (process.memoryUsage().heapUsed / 1024 / 1024 / 1024).toFixed(2) + " GB"); // Added
+    logMessage.info(`File size processed: ${(fs.statSync(inputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`);
+    logMessage.info(`Output JSON size: ${(fs.statSync(outputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`);
+    logMessage.info("Memory usage: " + (process.memoryUsage().heapUsed / 1024 / 1024 / 1024).toFixed(2) + " GB");
   } catch (err) {
-    logMessage.error(`Stack trace: ${err.message}`); // Added
+    logMessage.error(`Stack trace: ${err.message}`);
     writeStream.end();
   }
 }
