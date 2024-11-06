@@ -1,9 +1,29 @@
 const fs = require("fs");
+const fsPromises = require("fs").promises;
 const { Transform } = require("stream");
 const { pipeline } = require("stream/promises");
 
 const { performance } = require("perf_hooks");
 const { EOL } = require("os");
+
+const { Logger } = require("./logger");
+
+const logMessage = new Logger();
+
+// class CSVParserError extends Error {
+//   constructor(message, originalError = null) {
+//     super(message);
+//     this.name = "CSVParserError";
+//     this.originalError = originalError;
+//   }
+// }
+
+// class HeaderValidationError extends CSVParserError {
+//   constructor(message) {
+//     super(message);
+//     this.name = "HeaderValidationError";
+//   }
+// }
 
 class ParseCSV extends Transform {
   constructor() {
@@ -13,8 +33,9 @@ class ParseCSV extends Transform {
     this.isFirstBatch = true;
     this.separators = [",", ";", "|", "\t"];
     this.selectedSeparator = "";
-    this.lastLine = null;
     this.buffer = "";
+
+    logMessage.info("CSV Parser initialized");
   }
 
   formatField(value) {
@@ -31,6 +52,8 @@ class ParseCSV extends Transform {
 
   createHeaders(values) {
     if (!values || typeof values !== "string") {
+      logMessage.warning("No headers found or invalid header format");
+
       return;
     }
 
@@ -38,23 +61,18 @@ class ParseCSV extends Transform {
       if (values.includes(separator)) {
         this.selectedSeparator = separator;
         this.headers = values.split(separator).map((h) => h.trim());
+
+        logMessage.info(`Headers created with separator: "${this.selectedSeparator}"`); // Added
+        logMessage.info(`Found ${this.headers.length} columns: ${this.headers.join(", ")}`); // Added
+
         return this.headers;
       }
     }
+    logMessage.warning("No valid separator found in headers");
+
     this.headers = [];
     return this.headers;
   }
-
-  // createObjectString(headers, values) {
-  //   let result = "{";
-  //   for (let i = 0; i < headers.length; i++) {
-  //     if (i > 0) {
-  //       result += ",";
-  //     }
-  //     result += `"${headers[i]}":"${this.formatField(values[i])}"`; // create array of header/value pair strings and join them
-  //   }
-  //   return result + "}";
-  // }
 
   createObjectString(headers, values) {
     const pairs = headers.map((header, i) => `"${header}":"${this.formatField(values[i])}"`);
@@ -63,12 +81,17 @@ class ParseCSV extends Transform {
 
   _transform(chunk, encoding, done) {
     try {
+      // this.emit("error");
       const str = chunk.toString();
-      //if lastLine add to start of str
       const data = this.buffer + str;
       const lines = data.split(EOL);
 
-      // Save last line for flush
+      if (this.isFirstBatch) {
+        logMessage.info(`Processing first batch of data`); // Added
+      }
+
+      // this.emit("error", "error exists");
+
       this.buffer = lines.pop();
 
       if (!this.isHeadersCreated && lines.length > 0) {
@@ -83,9 +106,30 @@ class ParseCSV extends Transform {
         const prefix = this.isFirstBatch ? "[" : ",";
         this.isFirstBatch = false;
 
+        // if (validLines.length !== this.headers.length) {
+        //   if (validLines.length > this.headers.length) {
+        //     throw new Error("there are more values than headers!");
+        //   }
+        //   if (validLines.length < this.headers.length) {
+        //     throw new Error("there are more headers than values!");
+        //   }
+        // }
+
         const jsonData = validLines
           .map((line) => {
             const values = line.split(this.selectedSeparator);
+
+            // handling errors
+
+            if (values.length !== this.headers.length) {
+              if (values.length > this.headers.length) {
+                throw new Error("there are more values than headers!");
+              }
+              if (values.length < this.headers.length) {
+                throw new Error("there are more headers than values!");
+              }
+            }
+
             return this.createObjectString(this.headers, values);
           })
           .join(",");
@@ -97,6 +141,7 @@ class ParseCSV extends Transform {
 
       done();
     } catch (err) {
+      this.emit("error", new Error(err));
       done(err);
     }
   }
@@ -113,6 +158,7 @@ class ParseCSV extends Transform {
       this.push("]");
       done();
     } catch (error) {
+      this.emit("error", new Error(err));
       done(error);
     }
   }
@@ -121,6 +167,10 @@ class ParseCSV extends Transform {
 async function parseCSVtoJSON(inputFile, outputFile) {
   const startTime = performance.now();
   const readStream = fs.createReadStream(inputFile);
+
+  logMessage.info("Conversion start time");
+  logMessage.info(`Reading file: ${inputFile}`); // Added
+  logMessage.info(`Output will be saved to: ${outputFile}`);
 
   const writeStream = fs.createWriteStream(outputFile);
 
@@ -132,15 +182,41 @@ async function parseCSVtoJSON(inputFile, outputFile) {
     const endTime = performance.now();
     const duration = endTime - startTime;
 
-    console.log("Conversion completed successfully");
-    console.log(`Time taken: ${duration.toFixed(2)} milliseconds`);
-    console.log(`Time taken: ${(duration / 1000).toFixed(2)} seconds`);
+    logMessage.success("Conversion completed successfully!");
+    logMessage.success(`Time taken: ${(duration / 1000).toFixed(2)} seconds`);
+    logMessage.info(`File size processed: ${(fs.statSync(inputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`); // Added
+    logMessage.info(`Output JSON size: ${(fs.statSync(outputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`); // Added
+    logMessage.info("Memory usage: " + (process.memoryUsage().heapUsed / 1024 / 1024 / 1024).toFixed(2) + " GB"); // Added
   } catch (err) {
-    console.log(err);
+    logMessage.error(`Stack trace: ${err.message}`); // Added
     writeStream.end();
   }
 }
 
+async function saveLogFile(logFileName, saveFile) {
+  const logContent = saveFile.slice(2).join("\n");
+
+  try {
+    await fsPromises.writeFile(`../dataLog/${logFileName}.log`, logContent);
+    logMessage.success("Log file has been saved successfully");
+  } catch (err) {
+    logMessage.error("Error writing to log file:", err);
+  }
+}
+
+// Main execution
 const fileName = process.argv[2];
 
-parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../data/${fileName}.json`);
+async function main() {
+  try {
+    await parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../dataJSON/${logMessage.savingFileName(fileName)}.json`);
+    await saveLogFile(logMessage.savingFileName(fileName), logMessage.getData());
+  } catch (err) {
+    logMessage.error("Error in main process:", err.message);
+  }
+}
+
+main();
+
+// gali pasirasyti duplex streama
+// db butu per flaga, jog irasytu i duombaze tik kai paduodu i terminala node transform.js [filename] --saveTODB
