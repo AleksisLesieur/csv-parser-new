@@ -7,13 +7,14 @@ const { EOL } = require("os");
 
 class ParseCSV extends Transform {
   constructor() {
-    super({ encoding: "utf-8" });
-    this.isHeadersCreated = true;
+    super({ highWaterMark: 1024 * 1024 });
+    this.isHeadersCreated = false;
     this.headers = null;
     this.isFirstBatch = true;
     this.separators = [",", ";", "|", "\t"];
     this.selectedSeparator = "";
     this.lastLine = null;
+    this.buffer = "";
   }
 
   formatField(value) {
@@ -30,40 +31,50 @@ class ParseCSV extends Transform {
 
   createHeaders(values) {
     if (!values || typeof values !== "string") {
-      return [];
+      return;
     }
 
     for (const separator of this.separators) {
       if (values.includes(separator)) {
         this.selectedSeparator = separator;
         this.headers = values.split(separator).map((h) => h.trim());
+        return this.headers;
       }
     }
+    this.headers = [];
+    return this.headers;
   }
 
+  // createObjectString(headers, values) {
+  //   let result = "{";
+  //   for (let i = 0; i < headers.length; i++) {
+  //     if (i > 0) {
+  //       result += ",";
+  //     }
+  //     result += `"${headers[i]}":"${this.formatField(values[i])}"`; // create array of header/value pair strings and join them
+  //   }
+  //   return result + "}";
+  // }
+
   createObjectString(headers, values) {
-    let result = "{";
-    for (let i = 0; i < headers.length; i++) {
-      if (i > 0) {
-        result += ",";
-      }
-      result += `"${headers[i]}":"${this.formatField(values[i])}"`;
-    }
-    return result + "}";
+    const pairs = headers.map((header, i) => `"${header}":"${this.formatField(values[i])}"`);
+    return "{" + pairs.join(",") + "}";
   }
 
   _transform(chunk, encoding, done) {
     try {
       const str = chunk.toString();
-      const lines = str.split(EOL);
+      //if lastLine add to start of str
+      const data = this.buffer + str;
+      const lines = data.split(EOL);
 
       // Save last line for flush
-      this.lastLine = lines.pop();
+      this.buffer = lines.pop();
 
-      if (this.isHeadersCreated && lines.length > 0) {
+      if (!this.isHeadersCreated && lines.length > 0) {
         const headerLine = lines.shift();
         this.createHeaders(headerLine);
-        this.isHeadersCreated = false;
+        this.isHeadersCreated = true;
       }
 
       const validLines = lines.filter((line) => line.trim());
@@ -92,9 +103,9 @@ class ParseCSV extends Transform {
 
   _flush(done) {
     try {
-      if (this.lastLine && this.lastLine.trim()) {
+      if (this.buffer && this.buffer.trim()) {
         const prefix = this.isFirstBatch ? "[" : ",";
-        const values = this.lastLine.split(this.selectedSeparator);
+        const values = this.buffer.split(this.selectedSeparator);
         const jsonData = this.createObjectString(this.headers, values);
         this.push(prefix + jsonData);
       }
@@ -109,13 +120,9 @@ class ParseCSV extends Transform {
 
 async function parseCSVtoJSON(inputFile, outputFile) {
   const startTime = performance.now();
-  const readStream = fs.createReadStream(inputFile, {
-    encoding: "utf-8",
-  });
+  const readStream = fs.createReadStream(inputFile);
 
-  const writeStream = fs.createWriteStream(outputFile, {
-    encoding: "utf-8",
-  });
+  const writeStream = fs.createWriteStream(outputFile);
 
   const parse = new ParseCSV();
 
