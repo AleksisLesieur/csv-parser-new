@@ -1,14 +1,40 @@
 const fs = require("fs");
 const fsPromises = require("fs").promises;
-const { Transform } = require("stream");
+const { Transform, Duplex } = require("stream");
 const { pipeline } = require("stream/promises");
-
 const { performance } = require("perf_hooks");
 const { EOL } = require("os");
-
 const { Logger } = require("./logger");
+const Database = require("./database");
 
 const logMessage = new Logger();
+const db = new Database();
+
+class DatabaseStream extends Duplex {
+  constructor(fileName) {
+    super();
+    this.fileName = fileName;
+    this.jsonData = "";
+  }
+
+  _write(chunk, encoding, callback) {
+    this.jsonData += chunk;
+    callback();
+  }
+
+  _read(size) {
+    this.push(null);
+  }
+
+  async _final(callback) {
+    try {
+      await db.saveToDatabase(this.fileName, this.jsonData);
+      callback();
+    } catch (error) {
+      callback(error);
+    }
+  }
+}
 
 class ParseCSV extends Transform {
   constructor() {
@@ -47,8 +73,8 @@ class ParseCSV extends Transform {
         this.selectedSeparator = separator;
         this.headers = values.split(separator).map((h) => h.trim());
 
-        logMessage.info(`Headers created with separator: "${this.selectedSeparator}"`); // Added
-        logMessage.info(`Found ${this.headers.length} columns: ${this.headers.join(", ")}`); // Added
+        logMessage.info(`Headers created with separator: "${this.selectedSeparator}"`);
+        logMessage.info(`Found ${this.headers.length} columns: ${this.headers.join(", ")}`);
 
         return this.headers;
       }
@@ -60,8 +86,11 @@ class ParseCSV extends Transform {
   }
 
   createObjectString(headers, values) {
-    const pairs = headers.map((header, i) => `"${header}":"${this.formatField(values[i])}"`);
-    return "{" + pairs.join(",") + "}";
+    const orderedPairs = [];
+    for (let i = 0; i < headers.length; i++) {
+      orderedPairs.push(`"${headers[i]}":"${this.formatField(values[i])}"`);
+    }
+    return "{" + orderedPairs.join(",") + "}";
   }
 
   _transform(chunk, encoding, done) {
@@ -137,32 +166,41 @@ class ParseCSV extends Transform {
   }
 }
 
-async function parseCSVtoJSON(inputFile, outputFile) {
-  const startTime = performance.now();
+async function parseCSVtoJSON(inputFile, outputFile, fileName, saveDB = false) {
   const readStream = fs.createReadStream(inputFile);
-
-  logMessage.info("Conversion start time");
-  logMessage.info(`Reading file: ${inputFile}`);
-  logMessage.info(`Output will be saved to: ${outputFile}`);
-
   const writeStream = fs.createWriteStream(outputFile);
-
   const parse = new ParseCSV();
 
   try {
-    await pipeline(readStream, parse, writeStream);
+    if (saveDB) {
+      const dbStream = new DatabaseStream(fileName);
 
-    const endTime = performance.now();
-    const duration = endTime - startTime;
+      await pipeline(
+        readStream,
+        parse,
+        dbStream,
+        writeStream,
+        new Transform({
+          transform(chunk, encoding, callback) {
+            writeStream.write(chunk);
+            dbStream.write(chunk);
+            callback();
+          },
+          flush(callback) {
+            writeStream.end();
+            dbStream.end();
+            callback();
+          },
+        })
+      );
+    } else {
+      await pipeline(readStream, parse, writeStream);
+    }
 
     logMessage.success("Conversion completed successfully!");
-    logMessage.success(`Time taken: ${(duration / 1000).toFixed(2)} seconds`);
-    logMessage.info(`File size processed: ${(fs.statSync(inputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`);
-    logMessage.info(`Output JSON size: ${(fs.statSync(outputFile).size / 1024 / 1024 / 1024).toFixed(2)} GB`);
-    logMessage.info("Memory usage: " + (process.memoryUsage().heapUsed / 1024 / 1024 / 1024).toFixed(2) + " GB");
   } catch (err) {
-    logMessage.error(`Stack trace: ${err.message}`);
-    writeStream.end();
+    logMessage.error("Conversion failed:", err.message);
+    throw err;
   }
 }
 
@@ -178,18 +216,28 @@ async function saveLogFile(logFileName, saveFile) {
 }
 
 // Main execution
-const fileName = process.argv[2];
 
 async function main() {
+  const fileName = process.argv[2];
+  const saveDB = process.argv.includes("--saveDB");
+
   try {
-    await parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../dataJSON/${logMessage.savingFileName(fileName)}.json`);
+    if (saveDB) {
+      await db.initializeDatabase();
+      logMessage.info("Database initialized for crimes data");
+    }
+
+    await parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../dataJSON/${logMessage.savingFileName(fileName)}.json`, fileName, saveDB);
+    await db.finalizeBatch();
+
     await saveLogFile(logMessage.savingFileName(fileName), logMessage.getData());
   } catch (err) {
     logMessage.error("Error in main process:", err.message);
+    process.exit(1);
   }
 }
 
 main();
 
 // gali pasirasyti duplex streama
-// db butu per flaga, jog irasytu i duombaze tik kai paduodu i terminala node transform.js [filename] --saveTODB
+// db butu per flaga, jog irasytu i duombaze tik kai paduodu i terminala node transform.js [filename] --saveDB
