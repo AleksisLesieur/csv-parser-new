@@ -18,8 +18,8 @@ class DatabaseStream extends Transform {
   }
 
   _transform(chunk, encoding, callback) {
-    this.jsonData += chunk.toString(); // Accumulate data as a string
-    this.push(chunk); // Pass the chunk through to the next stream
+    this.jsonData += chunk.toString();
+    this.push(chunk);
     callback();
   }
 
@@ -218,6 +218,3 @@ async function main() {
 }
 
 main();
-
-// gali pasirasyti duplex streama
-// db butu per flaga, jog irasytu i duombaze tik kai paduodu i terminala node transform.js [filename] --saveDB
