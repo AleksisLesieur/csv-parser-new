@@ -10,20 +10,17 @@ const Database = require("./database");
 const logMessage = new Logger();
 const db = new Database();
 
-class DatabaseStream extends Duplex {
+class DatabaseStream extends Transform {
   constructor(fileName) {
     super();
     this.fileName = fileName;
     this.jsonData = "";
   }
 
-  _write(chunk, encoding, callback) {
-    this.jsonData += chunk;
+  _transform(chunk, encoding, callback) {
+    this.jsonData += chunk.toString(); // Accumulate data as a string
+    this.push(chunk); // Pass the chunk through to the next stream
     callback();
-  }
-
-  _read(size) {
-    this.push(null);
   }
 
   async _final(callback) {
@@ -175,24 +172,7 @@ async function parseCSVtoJSON(inputFile, outputFile, fileName, saveDB = false) {
     if (saveDB) {
       const dbStream = new DatabaseStream(fileName);
 
-      await pipeline(
-        readStream,
-        parse,
-        dbStream,
-        writeStream,
-        new Transform({
-          transform(chunk, encoding, callback) {
-            writeStream.write(chunk);
-            dbStream.write(chunk);
-            callback();
-          },
-          flush(callback) {
-            writeStream.end();
-            dbStream.end();
-            callback();
-          },
-        })
-      );
+      await pipeline(readStream, parse, dbStream, writeStream);
     } else {
       await pipeline(readStream, parse, writeStream);
     }
@@ -228,9 +208,9 @@ async function main() {
     }
 
     await parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../dataJSON/${logMessage.savingFileName(fileName)}.json`, fileName, saveDB);
-    await db.finalizeBatch();
 
     await saveLogFile(logMessage.savingFileName(fileName), logMessage.getData());
+    await db.finalizeBatch();
   } catch (err) {
     logMessage.error("Error in main process:", err.message);
     process.exit(1);

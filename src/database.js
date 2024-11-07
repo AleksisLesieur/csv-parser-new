@@ -2,6 +2,8 @@ const { Pool } = require("pg");
 require("dotenv").config({ path: "../.env" });
 const { Logger } = require("./logger");
 
+const logMessage = new Logger();
+
 class Database {
   constructor() {
     this.pool = new Pool({
