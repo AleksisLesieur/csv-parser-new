@@ -1,9 +1,18 @@
 const fs = require("fs");
 const path = require("path");
+const Database = require("./database");
 
 class Logger {
   constructor(...logData) {
     this.logData = logData;
+    this.shouldSaveToDb = process.argv.includes("--saveDB");
+    this.db = this.shouldSaveToDb ? new Database() : null;
+  }
+
+  async initialize() {
+    if (this.shouldSaveToDb) {
+      await this.db.initializeDatabase();
+    }
   }
 
   savingFileName(filename) {
@@ -25,23 +34,44 @@ class Logger {
     return `${hours}h:${minutes}m:${seconds}s`;
   }
 
-  info(message) {
-    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; INFO; ${message}`);
+  getTimestamp() {
+    return new Date();
   }
 
-  warning(message) {
-    this.saveDate();
-    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; WARNING; ${message}`);
+  async log(level, message) {
+    const timestamp = this.getTimestamp();
+    const logMessage = `${this.saveDate()}; ${this.saveHours()}; ${level}; ${message}`;
+    this.logData.push(logMessage);
+
+    if (this.shouldSaveToDb) {
+      try {
+        await this.db.saveLog(timestamp, level, message);
+      } catch (error) {
+        console.error("Failed to save log to database:", error);
+      }
+    }
   }
 
-  error(message) {
-    this.saveDate();
-    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; ERROR; ${message}`);
+  async close() {
+    if (this.shouldSaveToDb && this.db) {
+      await this.db.finalizeBatch();
+    }
   }
 
-  success(message) {
-    this.saveDate();
-    this.logData.push(`${this.saveDate()}; ${this.saveHours()}; SUCCESS; ${message}`);
+  async info(message) {
+    await this.log("INFO", message);
+  }
+
+  async warning(message) {
+    await this.log("WARNING", message);
+  }
+
+  async error(message) {
+    await this.log("ERROR", message);
+  }
+
+  async success(message) {
+    await this.log("SUCCESS", message);
   }
 
   getData() {

@@ -1,6 +1,6 @@
 const fs = require("fs");
 const fsPromises = require("fs").promises;
-const { Transform, Duplex } = require("stream");
+const { Transform } = require("stream");
 const { pipeline } = require("stream/promises");
 const { performance } = require("perf_hooks");
 const { EOL } = require("os");
@@ -90,7 +90,7 @@ class ParseCSV extends Transform {
     return "{" + orderedPairs.join(",") + "}";
   }
 
-  _transform(chunk, encoding, done) {
+  _transform(chunk, encoding, done) {   const prefix = this.isFirstBatch ? "[" : ",";
     try {
       const str = chunk.toString();
       const data = this.buffer + str;
@@ -164,20 +164,36 @@ class ParseCSV extends Transform {
 }
 
 async function parseCSVtoJSON(inputFile, outputFile, fileName, saveDB = false) {
+  const startTime = performance.now();
   const readStream = fs.createReadStream(inputFile);
   const writeStream = fs.createWriteStream(outputFile);
   const parse = new ParseCSV();
 
+  let endTime;
+  let duration;
+
+  readStream.on("error", async (error) => {
+    if (error.code === "ENOENT") {
+      console.error(`\nError: "${fileName}.csv" does not exist in the csv-data folder. Please check the file name and try again.\n`);
+      await logMessage.error(`Error: "${fileName}.csv" does not exist in the csv-data folder. Please check the file name and try again.`);
+      process.exit(1);
+    }
+  });
+
   try {
     if (saveDB) {
       const dbStream = new DatabaseStream(fileName);
-
       await pipeline(readStream, parse, dbStream, writeStream);
     } else {
       await pipeline(readStream, parse, writeStream);
     }
 
-    logMessage.success("Conversion completed successfully!");
+    endTime = performance.now();
+    duration = endTime - startTime;
+
+    const message = saveDB ? "Conversion completed and file saved to database!" : "Conversion to JSON was completed successfully!";
+    logMessage.success(message);
+    logMessage.success(`Time taken: ${(duration / 1000).toFixed(2)} seconds`);
   } catch (err) {
     logMessage.error("Conversion failed:", err.message);
     throw err;
@@ -207,9 +223,11 @@ async function main() {
       logMessage.info("Database initialized for crimes data");
     }
 
-    await parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../dataJSON/${logMessage.savingFileName(fileName)}.json`, fileName, saveDB);
+    if (fileName) {
+      await parseCSVtoJSON(`../csv-data/${fileName}.csv`, `../dataJSON/${logMessage.savingFileName(fileName)}.json`, fileName, saveDB);
+      await saveLogFile(logMessage.savingFileName(fileName), logMessage.getData());
+    }
 
-    await saveLogFile(logMessage.savingFileName(fileName), logMessage.getData());
     await db.finalizeBatch();
   } catch (err) {
     logMessage.error("Error in main process:", err.message);

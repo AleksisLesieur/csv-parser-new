@@ -1,8 +1,7 @@
 const { Pool } = require("pg");
 require("dotenv").config({ path: "../.env" });
-const { Logger } = require("./logger");
-
-const logMessage = new Logger();
+const fs = require("fs").promises;
+const path = require("path");
 
 class Database {
   constructor() {
@@ -15,17 +14,15 @@ class Database {
     });
   }
 
+  async loadSqlFile(filename) {
+    return await fs.readFile(path.join(__dirname, "queries", filename), "utf-8");
+  }
+
   async initializeDatabase() {
     const client = await this.pool.connect();
     try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS crimes (
-          id SERIAL PRIMARY KEY,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          file_name VARCHAR(255),
-          data JSON
-        );
-      `);
+      const initQuery = await this.loadSqlFile("init.sql");
+      await client.query(initQuery);
     } finally {
       client.release();
     }
@@ -34,10 +31,25 @@ class Database {
   async saveToDatabase(fileName, data) {
     const client = await this.pool.connect();
     try {
-      await client.query("INSERT INTO crimes (file_name, data) VALUES ($1, $2::json)", [fileName, data]);
+      const insertQuery = await this.loadSqlFile("insert_crime.sql");
+      await client.query(insertQuery, [fileName, data]);
     } finally {
       client.release();
     }
+  }
+
+  async saveLog(timestamp, level, message) {
+    const client = await this.pool.connect();
+    try {
+      const insertLogQuery = await this.loadSqlFile("insert_log.sql");
+      await client.query(insertLogQuery, [timestamp, level, message]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async finalizeBatch() {
+    await this.pool.end();
   }
 }
 
