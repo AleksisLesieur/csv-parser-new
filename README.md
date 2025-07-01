@@ -33,50 +33,94 @@ csv-parser-new/
 3. **Install dependencies** (if any - this script uses only built-in Node.js modules)
 4. **Place your CSV files** in the `csv-data/` folder
 
-## 🎯 Generating Test CSV Files
+## 🎯 CSV File Generator (For Testing)
 
-**Need a large CSV file for testing?** Use the included generator:
+**Don't have a large CSV file to test with?** Use our built-in generator to create realistic test files of any size!
+
+### 🚀 Generator Quick Start
 
 ```bash
-# Navigate to the src directory
+# Navigate to src directory
 cd src
 
-# Generate test CSV files
-node generate-csv.js filename [size_in_GB]
-
-# Examples:
-node generate-csv.js test_data          # Creates 1.5GB file (default)
-node generate-csv.js large_dataset 2.4  # Creates exactly 2.4GB file
-node generate-csv.js small_test 0.1     # Creates exactly 100MB file
-node generate-csv.js huge_file 5.0      # Creates exactly 5.0GB file
+# Generate test files
+node generate-csv.js my_test_file 2.0    # Creates exactly 2.0 GB
+node generate-csv.js small_sample 0.1    # Creates exactly 100 MB
+node generate-csv.js huge_dataset 5.0    # Creates exactly 5.0 GB
 ```
 
-### CSV Generator Features
-- **Precise Size Control**: Creates files with byte-perfect accuracy
-- **Realistic Data**: Generates employee records with names, emails, addresses, salaries
-- **Progress Tracking**: Shows generation progress with visual progress bar
-- **Automatic Placement**: Saves files directly to `csv-data/` folder
-- **Size Verification**: Confirms exact file size after generation
+### ⚡ Generator Features
 
-### Generated CSV Structure
-The generator creates realistic employee data with these columns:
+| Feature | Description |
+|---------|-------------|
+| **🎯 Byte-Perfect Precision** | Creates files with exact size down to the byte |
+| **📊 Realistic Data** | Employee records with names, emails, salaries, addresses |
+| **🔄 Progress Tracking** | Real-time progress bar during generation |
+| **📁 Auto-Placement** | Saves directly to `csv-data/` folder |
+| **✅ Size Verification** | Confirms exact file size after completion |
+
+### 📋 Generated Data Structure
+
+The generator creates realistic employee datasets:
+
 ```csv
 first_name,last_name,email,age,city,company,department,salary,hire_date,phone,employee_id,address,zip_code,performance_rating,active_projects
 John,Smith,john.smith@gmail.com,28,New York,TechCorp,Engineering,75000,2020-03-15,(555) 123-4567,EMP00123,1234 Main St,10001,4,12
+Jane,Doe,jane.doe@company.com,32,Los Angeles,DataSoft,Marketing,68000,2019-07-22,(555) 987-6543,EMP00124,5678 Oak Ave,90210,5,8
 ```
 
-### Generator Output Example
-```
+**Data includes:** Names, emails, ages, cities, companies, departments, salaries, hire dates, phone numbers, employee IDs, addresses, zip codes, performance ratings, and active project counts.
+
+### 🎬 Generator in Action
+
+```bash
+$ node generate-csv.js large_test 2.4
+
 🎯 Target size: 2.4 GB (2,576,980,377 bytes)
+📏 Average row size: 157 bytes
+📊 Estimated rows needed: 16,414,652
+📄 Output file: C:\...\csv-data\large_test.csv
+🚀 Starting generation...
 📊 Generating ~105% of target (will adjust to exact size after)...
-🔄 Generating: [████████████████████████████████] 100% (2635.50/2635.50 MB)
-✂️  File too large by 62,914,560 bytes, truncating...
+🔄 Generating: [████████████████████████████████] 100% (2635.50/2635.50 MB) - 16,800,000 rows
+🏁 Generation complete, adjusting to exact size...
+✅ Write stream finished
+📏 Generated size: 2.523 GB
+🎯 Target size: 2.4 GB
+✂️  File too large by 132,435,968 bytes, truncating...
+✂️  File truncated to exact size
+🎯 Final verification: 2.400000 GB
 ✅ PERFECT SIZE MATCH! 🎯
+
 📊 Final stats:
-   📄 File: large_dataset.csv
+   📄 File: large_test.csv
    📏 Size: 2.400000 GB (2457.60 MB)
-   🎉 Ready to test with: node transform.js large_dataset
+   📝 Rows: 16,414,652 (+ 1 header)
+   📍 Location: C:\...\csv-data\large_test.csv
+⏱️ Generation time: 45.32 seconds
+🚀 Speed: 54.23 MB/s
+
+🎉 Ready to test with: node transform.js large_test
 ```
+
+### 📏 Size Examples
+
+| Command | File Size | Use Case |
+|---------|-----------|----------|
+| `node generate-csv.js tiny 0.01` | 10 MB | Quick tests |
+| `node generate-csv.js small 0.1` | 100 MB | Small dataset testing |
+| `node generate-csv.js medium 0.5` | 500 MB | Medium performance testing |
+| `node generate-csv.js large 1.5` | 1.5 GB | Large file testing |
+| `node generate-csv.js huge 3.0` | 3.0 GB | Stress testing |
+| `node generate-csv.js extreme 10.0` | 10.0 GB | Maximum performance testing |
+
+### ⚠️ Generator Requirements
+
+- **Disk Space**: Needs ~105% of target size temporarily during generation
+- **Memory**: Uses minimal RAM (streaming generation)
+- **Time**: ~50-100 MB/s generation speed (depends on your system)
+
+---
 
 ## 🚀 Quick Start Guide
 
@@ -84,7 +128,7 @@ John,Smith,john.smith@gmail.com,28,New York,TechCorp,Engineering,75000,2020-03-1
 1. Place your CSV file in the `csv-data/` folder
 2. Run: `node transform.js your_filename`
 
-### Option 2: Generate a Test CSV File
+### Option 2: Generate a Test CSV File (Recommended for Testing)
 1. Generate test data: `node generate-csv.js test_data 1.5`
 2. Parse the generated file: `node transform.js test_data`
 
@@ -96,7 +140,7 @@ cd csv-parser-new/src
 # Generate a 2GB test file
 node generate-csv.js large_test 2.0
 
-# Parse the generated file
+# Parse the generated file  
 node transform.js large_test
 
 # Check results
@@ -104,9 +148,9 @@ node transform.js large_test
 # - Processing log: ../dataLog/large_test.log
 ```
 
-## 📖 Detailed Usage
+## 📖 CSV Parser Usage
 
-### CSV Parser Commands
+### 📄 Parser Commands
 
 #### Basic Usage (Recommended)
 
