@@ -18,6 +18,7 @@ A powerful Node.js script that converts CSV files to JSON format with real-time 
 csv-parser-new/
 ├── src/
 │   ├── transform.js      # Main parsing script
+│   ├── generate-csv.js   # CSV file generator for testing
 │   ├── logger.js         # Logging utility
 │   └── database.js       # Database interface (optional)
 ├── csv-data/            # Input CSV files go here
@@ -32,9 +33,82 @@ csv-parser-new/
 3. **Install dependencies** (if any - this script uses only built-in Node.js modules)
 4. **Place your CSV files** in the `csv-data/` folder
 
-## 📖 Usage
+## 🎯 Generating Test CSV Files
 
-### Basic Usage (Recommended)
+**Need a large CSV file for testing?** Use the included generator:
+
+```bash
+# Navigate to the src directory
+cd src
+
+# Generate test CSV files
+node generate-csv.js filename [size_in_GB]
+
+# Examples:
+node generate-csv.js test_data          # Creates 1.5GB file (default)
+node generate-csv.js large_dataset 2.4  # Creates exactly 2.4GB file
+node generate-csv.js small_test 0.1     # Creates exactly 100MB file
+node generate-csv.js huge_file 5.0      # Creates exactly 5.0GB file
+```
+
+### CSV Generator Features
+- **Precise Size Control**: Creates files with byte-perfect accuracy
+- **Realistic Data**: Generates employee records with names, emails, addresses, salaries
+- **Progress Tracking**: Shows generation progress with visual progress bar
+- **Automatic Placement**: Saves files directly to `csv-data/` folder
+- **Size Verification**: Confirms exact file size after generation
+
+### Generated CSV Structure
+The generator creates realistic employee data with these columns:
+```csv
+first_name,last_name,email,age,city,company,department,salary,hire_date,phone,employee_id,address,zip_code,performance_rating,active_projects
+John,Smith,john.smith@gmail.com,28,New York,TechCorp,Engineering,75000,2020-03-15,(555) 123-4567,EMP00123,1234 Main St,10001,4,12
+```
+
+### Generator Output Example
+```
+🎯 Target size: 2.4 GB (2,576,980,377 bytes)
+📊 Generating ~105% of target (will adjust to exact size after)...
+🔄 Generating: [████████████████████████████████] 100% (2635.50/2635.50 MB)
+✂️  File too large by 62,914,560 bytes, truncating...
+✅ PERFECT SIZE MATCH! 🎯
+📊 Final stats:
+   📄 File: large_dataset.csv
+   📏 Size: 2.400000 GB (2457.60 MB)
+   🎉 Ready to test with: node transform.js large_dataset
+```
+
+## 🚀 Quick Start Guide
+
+### Option 1: Use Your Own CSV File
+1. Place your CSV file in the `csv-data/` folder
+2. Run: `node transform.js your_filename`
+
+### Option 2: Generate a Test CSV File
+1. Generate test data: `node generate-csv.js test_data 1.5`
+2. Parse the generated file: `node transform.js test_data`
+
+### Complete Example Workflow
+```bash
+# Navigate to project
+cd csv-parser-new/src
+
+# Generate a 2GB test file
+node generate-csv.js large_test 2.0
+
+# Parse the generated file
+node transform.js large_test
+
+# Check results
+# - JSON output: ../dataJSON/large_test.json
+# - Processing log: ../dataLog/large_test.log
+```
+
+## 📖 Detailed Usage
+
+### CSV Parser Commands
+
+#### Basic Usage (Recommended)
 
 ```bash
 # Navigate to the src directory
@@ -47,6 +121,19 @@ node transform.js filename
 node transform.js large_dataset      # Processes large_dataset.csv
 node transform.js sales_data         # Processes sales_data.csv
 node transform.js customer_info.csv  # Processes customer_info.csv (extension optional)
+```
+
+#### CSV Generator Commands
+
+```bash
+# Generate test CSV files for parsing
+node generate-csv.js filename [size_in_GB]
+
+# Examples:
+node generate-csv.js test_small 0.1     # 100MB file
+node generate-csv.js test_medium 1.0    # 1GB file  
+node generate-csv.js test_large 2.5     # 2.5GB file
+node generate-csv.js benchmark 5.0      # 5GB file for performance testing
 ```
 
 ### With Database Storage (BROKEN - Do Not Use)
@@ -139,7 +226,7 @@ The script provides real-time feedback:
 - **Efficient JSON Generation**: Direct string building for optimal performance
 - **Progress Throttling**: Updates every 1% to avoid terminal spam
 
-## 🐛 Error Handling
+## Error Handling
 
 ### Common Issues and Solutions
 
@@ -206,6 +293,11 @@ The script provides real-time feedback:
 - Check Node.js installation: `node --version`
 - Verify you're in the `src/` directory
 - Ensure `logger.js` and `database.js` exist in the same folder
+
+### Generator Issues
+- **Generator hangs**: Check available disk space (needs ~105% of target size temporarily)
+- **Permission errors**: Ensure write access to `csv-data/` folder
+- **Invalid size**: Use positive numbers only (e.g., `0.5`, `1.0`, `2.4`)
 
 ### Progress Bar Issues
 - Terminal compatibility: Use modern terminal (Windows Terminal, iTerm2, etc.)
