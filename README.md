@@ -226,7 +226,7 @@ The script provides real-time feedback:
 - **Efficient JSON Generation**: Direct string building for optimal performance
 - **Progress Throttling**: Updates every 1% to avoid terminal spam
 
-## Error Handling
+## 🐛 Error Handling
 
 ### Common Issues and Solutions
 
